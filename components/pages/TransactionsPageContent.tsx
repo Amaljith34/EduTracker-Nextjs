@@ -1,12 +1,21 @@
 'use client';
 
-import { FormEvent, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
-import { apiCreateTransaction, apiGetTransactions, apiGetUsers } from '@/lib/api';
-import type { EndUser, Transaction } from '@/types';
+import { RowActionsMenu } from '@/components/ui/RowActionsMenu';
+import { DataTable, Column, tableRowKey } from '@/components/ui/DataTable';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { Button } from '@/components/ui/Button';
+import { TransactionFormModal } from '@/components/forms/TransactionFormModal';
+import {
+  apiDeleteTransaction,
+  apiGetTransactions,
+  apiGetUsers,
+} from '@/lib/api';
+import type { EndUser, ListFilters, Transaction } from '@/types';
 import { UserRole } from '@/types';
-import { exportToCsv, formatCurrency, formatDate } from '@/lib/utils';
+import { exportToCsv, formatCurrency, formatDate, getEntityId } from '@/lib/utils';
 import { FilterBar } from '@/components/ui/FilterBar';
 
 interface NavItem {
@@ -18,107 +27,115 @@ interface TransactionsPageContentProps {
   nav: NavItem[];
   layoutTitle: string;
   allowedRoles: UserRole[];
+  canEdit?: boolean;
 }
 
 export function TransactionsPageContent({
   nav,
   layoutTitle,
   allowedRoles,
+  canEdit = true,
 }: TransactionsPageContentProps) {
   const [txns, setTxns] = useState<Transaction[]>([]);
   const [users, setUsers] = useState<EndUser[]>([]);
-  const [filters, setFilters] = useState({});
-  const [form, setForm] = useState({
-    userId: '',
-    amountPaid: '',
-    paymentDate: new Date().toISOString().split('T')[0],
-    notes: '',
-  });
+  const [filters, setFilters] = useState<ListFilters>({});
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editing, setEditing] = useState<Transaction | null>(null);
 
-  useEffect(() => {
-    apiGetUsers({ limit: 100 }).then((r) => setUsers(r.data));
+  const load = useCallback(() => {
     apiGetTransactions(filters).then((r) => setTxns(r.data));
   }, [filters]);
 
-  const onSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-    await apiCreateTransaction({ ...form, amountPaid: Number(form.amountPaid) });
-    apiGetTransactions(filters).then((r) => setTxns(r.data));
+  useEffect(() => {
+    if (canEdit) apiGetUsers({ limit: 100 }).then((r) => setUsers(r.data));
+    load();
+  }, [load, canEdit]);
+
+  const handleDelete = async (id: string) => {
+    if (!window.confirm('Delete this transaction?')) return;
+    await apiDeleteTransaction(id);
+    load();
   };
+
+  const columns: Column<Transaction>[] = [
+    {
+      key: 'amountPaid',
+      header: 'Amount',
+      render: (t) => formatCurrency(t.amountPaid),
+    },
+    {
+      key: 'paymentDate',
+      header: 'Date',
+      render: (t) => formatDate(t.paymentDate),
+    },
+    { key: 'notes', header: 'Notes', render: (t) => t.notes || '—' },
+    ...(canEdit
+      ? [
+          {
+            key: 'actions',
+            header: '',
+            align: 'right' as const,
+            className: 'w-[72px]',
+            render: (t: Transaction) => {
+              const id = getEntityId(t);
+              return (
+                <RowActionsMenu
+                  menuId={`txn-${id}`}
+                  actions={[
+                    { label: 'Edit', onClick: () => { setEditing(t); setModalOpen(true); } },
+                    { label: 'Delete', variant: 'danger' as const, onClick: () => handleDelete(id) },
+                  ]}
+                />
+              );
+            },
+          },
+        ]
+      : []),
+  ];
 
   return (
     <ProtectedRoute allowed={allowedRoles}>
       <DashboardLayout nav={nav} title={layoutTitle}>
-        <h2 className="mb-4 text-2xl font-bold">Transactions</h2>
-        <FilterBar filters={filters} onChange={setFilters} showUserFilter users={users} />
-        <form
-          onSubmit={onSubmit}
-          className="mb-6 grid gap-3 rounded-xl border border-slate-800 bg-slate-900 p-4 md:grid-cols-4"
-        >
-          <select
-            required
-            className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-            value={form.userId}
-            onChange={(e) => setForm({ ...form, userId: e.target.value })}
-          >
-            <option value="">Select user</option>
-            {users.map((u) => (
-              <option key={u._id} value={u._id}>
-                {u.fullName}
-              </option>
-            ))}
-          </select>
-          <input
-            required
-            type="number"
-            placeholder="Amount paid"
-            className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-            value={form.amountPaid}
-            onChange={(e) => setForm({ ...form, amountPaid: e.target.value })}
-          />
-          <input
-            required
-            type="date"
-            className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-            value={form.paymentDate}
-            onChange={(e) => setForm({ ...form, paymentDate: e.target.value })}
-          />
-          <button
-            type="submit"
-            className="rounded-lg bg-emerald-500 py-2 text-sm font-medium text-slate-950"
-          >
-            Record Payment
-          </button>
-        </form>
-        <button
-          type="button"
-          className="mb-3 text-sm text-emerald-400"
-          onClick={() =>
-            exportToCsv(txns as unknown as Record<string, unknown>[], 'transactions.csv')
+        <PageHeader
+          title="Transactions"
+          description="Record and manage student fee payments."
+          actions={
+            canEdit ? (
+              <>
+                <Button
+                  variant="secondary"
+                  onClick={() => exportToCsv(txns as unknown as Record<string, unknown>[], 'transactions.csv')}
+                >
+                  Export CSV
+                </Button>
+                <Button onClick={() => { setEditing(null); setModalOpen(true); }}>
+                  + Record Payment
+                </Button>
+              </>
+            ) : (
+              <Button
+                variant="secondary"
+                onClick={() => exportToCsv(txns as unknown as Record<string, unknown>[], 'transactions.csv')}
+              >
+                Export CSV
+              </Button>
+            )
           }
-        >
-          Export CSV
-        </button>
-        <div className="overflow-x-auto rounded-xl border border-slate-800">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-900 text-slate-500">
-              <tr>
-                <th className="p-3 text-left">Amount</th>
-                <th className="p-3">Date</th>
-                <th className="p-3">Notes</th>
-              </tr>
-            </thead>
-            <tbody>
-              {txns.map((t) => (
-                <tr key={t._id} className="border-t border-slate-800">
-                  <td className="p-3">{formatCurrency(t.amountPaid)}</td>
-                  <td className="p-3">{formatDate(t.paymentDate)}</td>
-                  <td className="p-3">{t.notes}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        />
+
+        <FilterBar filters={filters} onChange={setFilters} showUserFilter={canEdit} users={users} />
+
+        <DataTable columns={columns} data={txns} rowKey={tableRowKey} mobileTitleKey="amountPaid" emptyMessage="No transactions yet" />
+
+        {canEdit ? (
+          <TransactionFormModal
+            open={modalOpen}
+            onClose={() => { setModalOpen(false); setEditing(null); }}
+            onSaved={load}
+            users={users}
+            transaction={editing}
+          />
+        ) : null}
       </DashboardLayout>
     </ProtectedRoute>
   );

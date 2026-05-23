@@ -1,30 +1,27 @@
 'use client';
 
-import { FormEvent, useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { RowActionsMenu } from '@/components/ui/RowActionsMenu';
 import { DataTable, Column, tableRowKey } from '@/components/ui/DataTable';
-import { apiCreateUser, apiDeleteUser, apiGetUsers } from '@/lib/api';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { Button } from '@/components/ui/Button';
+import { UserFormModal } from '@/components/forms/UserFormModal';
+import { apiDeleteUser, apiGetUsers } from '@/lib/api';
 import { SUBSCRIBER_NAV } from '@/lib/adminNav';
-import { exportToCsv, getEntityId } from '@/lib/utils';
+import { exportToCsv, formatCurrency, getEntityId } from '@/lib/utils';
 import type { EndUser } from '@/types';
 import { UserRole } from '@/types';
+import { FormField, TextInput } from '@/components/ui/FormField';
 
 export default function SubscriberUsersPage() {
   const router = useRouter();
   const [users, setUsers] = useState<EndUser[]>([]);
   const [search, setSearch] = useState('');
-  const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({
-    fullName: '',
-    email: '',
-    phone: '',
-    password: '',
-    subjectName: '',
-    amountPerHour: '',
-  });
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editing, setEditing] = useState<EndUser | null>(null);
 
   const load = useCallback(() => {
     apiGetUsers({ search, limit: 50 }).then((r) => setUsers(r.data));
@@ -34,26 +31,9 @@ export default function SubscriberUsersPage() {
     load();
   }, [load]);
 
-  const onCreate = async (e: FormEvent) => {
-    e.preventDefault();
-    const subjects = form.subjectName
-      ? [{ subjectName: form.subjectName, amountPerHour: Number(form.amountPerHour) }]
-      : [];
-    await apiCreateUser({
-      fullName: form.fullName,
-      email: form.email,
-      phone: form.phone,
-      password: form.password,
-      subjects,
-    });
-    setShowForm(false);
-    load();
-  };
-
   const handleDelete = useCallback(
     async (id: string) => {
-      if (!id) return;
-      if (!window.confirm('Delete this user?')) return;
+      if (!id || !window.confirm('Delete this user?')) return;
       try {
         await apiDeleteUser(id);
         load();
@@ -70,13 +50,16 @@ export default function SubscriberUsersPage() {
     { key: 'phone', header: 'Phone' },
     {
       key: 'subjects',
-      header: 'Subjects',
+      header: 'Subjects & rates',
       hideOnMobile: true,
-      render: (u) => u.subjects?.map((s) => s.subjectName).join(', ') || '—',
+      render: (u) =>
+        u.subjects?.length
+          ? u.subjects.map((s) => `${s.subjectName} (${formatCurrency(s.amountPerHour)}/hr)`).join(', ')
+          : '—',
     },
     {
       key: 'actions',
-      header: 'Actions',
+      header: '',
       align: 'right',
       className: 'w-[72px]',
       render: (u) => {
@@ -85,17 +68,9 @@ export default function SubscriberUsersPage() {
           <RowActionsMenu
             menuId={`sub-user-menu-${id}`}
             actions={[
-              {
-                label: 'Details',
-                onClick: () => router.push(`/subscriber/users/${id}`),
-                disabled: !id,
-              },
-              {
-                label: 'Delete',
-                variant: 'danger',
-                onClick: () => handleDelete(id),
-                disabled: !id,
-              },
+              { label: 'Details', onClick: () => router.push(`/subscriber/users/${id}`), disabled: !id },
+              { label: 'Edit', onClick: () => { setEditing(u); setModalOpen(true); } },
+              { label: 'Delete', variant: 'danger', onClick: () => handleDelete(id), disabled: !id },
             ]}
           />
         );
@@ -106,67 +81,42 @@ export default function SubscriberUsersPage() {
   return (
     <ProtectedRoute allowed={[UserRole.SUBSCRIBER]}>
       <DashboardLayout nav={[...SUBSCRIBER_NAV]} title="Subscriber Panel">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <h2 className="text-2xl font-bold">Users</h2>
-          <div className="flex flex-wrap gap-2">
-            <input
-              placeholder="Search..."
-              className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm"
+        <PageHeader
+          title="Users"
+          description="Create students with subject hourly rates for automatic review billing."
+          actions={
+            <>
+              <Button
+                variant="secondary"
+                onClick={() => exportToCsv(users as unknown as Record<string, unknown>[], 'users.csv')}
+              >
+                Export CSV
+              </Button>
+              <Button onClick={() => { setEditing(null); setModalOpen(true); }}>
+                + Add User
+              </Button>
+            </>
+          }
+        />
+
+        <div className="mb-6 max-w-sm">
+          <FormField label="Search">
+            <TextInput
+              placeholder="Name, email, phone…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
-            <button
-              type="button"
-              onClick={() => exportToCsv(users as unknown as Record<string, unknown>[], 'users.csv')}
-              className="rounded-lg border border-slate-700 px-3 py-2 text-sm"
-            >
-              Export CSV
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowForm(!showForm)}
-              className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-slate-950"
-            >
-              Add User
-            </button>
-          </div>
+          </FormField>
         </div>
 
-        {showForm && (
-          <form
-            onSubmit={onCreate}
-            className="mt-4 grid gap-3 rounded-xl border border-slate-800 bg-slate-900 p-4 md:grid-cols-2"
-          >
-            {(['fullName', 'email', 'phone', 'password', 'subjectName', 'amountPerHour'] as const).map(
-              (f) => (
-                <input
-                  key={f}
-                  required={f !== 'amountPerHour' && f !== 'subjectName'}
-                  placeholder={f}
-                  className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                  value={form[f]}
-                  onChange={(e) => setForm({ ...form, [f]: e.target.value })}
-                />
-              ),
-            )}
-            <button
-              type="submit"
-              className="rounded-lg bg-emerald-500 py-2 text-sm font-medium text-slate-950 md:col-span-2"
-            >
-              Create User
-            </button>
-          </form>
-        )}
+        <DataTable columns={columns} data={users} rowKey={tableRowKey} mobileTitleKey="fullName" emptyMessage="No users found" />
 
-        <div className="mt-6">
-          <DataTable
-            columns={columns}
-            data={users}
-            rowKey={tableRowKey}
-            mobileTitleKey="fullName"
-            emptyMessage="No users found"
-          />
-        </div>
+        <UserFormModal
+          open={modalOpen}
+          onClose={() => { setModalOpen(false); setEditing(null); }}
+          onSaved={load}
+          user={editing}
+        />
       </DashboardLayout>
     </ProtectedRoute>
   );

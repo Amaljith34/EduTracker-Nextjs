@@ -62,8 +62,35 @@ export interface PaginatedResponse<T> {
   pagination: PaginationMeta;
 }
 
+/** Billing period / review cadence (used in filters, PDF export, legacy UI) */
+export const REVIEW_TYPES = ['daily', 'weekly', 'monthly'] as const;
+
+export type ReviewType = (typeof REVIEW_TYPES)[number];
+
+export const REVIEW_TYPE_OPTIONS: ReadonlyArray<{ value: ReviewType; label: string }> = [
+  { value: 'daily', label: 'Daily Review' },
+  { value: 'weekly', label: 'Weekly Review' },
+  { value: 'monthly', label: 'Monthly Review' },
+];
+
+export const REVIEW_TYPE_LABELS: Readonly<Record<ReviewType, string>> = {
+  daily: 'Daily Review',
+  weekly: 'Weekly Review',
+  monthly: 'Monthly Review',
+};
+
+export function isReviewType(value: string): value is ReviewType {
+  return (REVIEW_TYPES as readonly string[]).includes(value);
+}
+
+export function getReviewTypeLabel(type: ReviewType | string | undefined): string {
+  if (type && isReviewType(type)) return REVIEW_TYPE_LABELS[type];
+  return type || '—';
+}
+
 export interface Review {
   _id: string;
+  id?: string;
   userId: string;
   subscriberId: string;
   subjectName: string;
@@ -73,6 +100,8 @@ export interface Review {
   finalAmount: number;
   date: string;
   notes?: string;
+  /** Optional cadence label for analytics / exports */
+  reviewType?: ReviewType;
 }
 
 export interface Transaction {
@@ -139,4 +168,12 @@ export interface ListFilters {
   toDate?: string;
   period?: DatePeriod;
   subscriberId?: string;
+}
+
+/** @deprecated Use Review + subject billing fields; kept for legacy stats cards */
+export interface ReviewStats {
+  total_review: number;
+  total_session: number;
+  total_group_session: number;
+  total_group_project: number;
 }

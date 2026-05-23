@@ -115,6 +115,13 @@ export async function apiGetMe(): Promise<AuthUser> {
   return request<AuthUser>('/auth/me');
 }
 
+export async function apiUpdateProfile(data: Record<string, string>): Promise<AuthUser> {
+  return request<AuthUser>('/auth/profile', {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 
 export async function apiGetDashboard(filters?: ListFilters): Promise<DashboardData> {

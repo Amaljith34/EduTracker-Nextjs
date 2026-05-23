@@ -7,6 +7,8 @@ import { apiLogin } from '@/lib/api';
 import { useAuth } from '@/lib/AuthContext';
 import { getRoleHomePath } from '@/lib/auth';
 import { UserRole } from '@/types';
+import { Button } from '@/components/ui/Button';
+import { FormField, SelectInput, TextInput } from '@/components/ui/FormField';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -33,59 +35,69 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-950 px-4">
-      <form onSubmit={onSubmit} className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-8">
-        <h1 className="text-2xl font-bold text-white">Sign in</h1>
-        <p className="mt-1 text-sm text-slate-500">EduTracker — Admin, Subscriber, or User</p>
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#07090f] px-4">
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute -left-32 top-20 h-96 w-96 rounded-full bg-emerald-500/10 blur-3xl" />
+        <div className="absolute -right-32 bottom-20 h-96 w-96 rounded-full bg-sky-500/10 blur-3xl" />
+      </div>
 
-        <label className="mt-6 block text-sm text-slate-400">Role</label>
-        <select
-          className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2"
-          value={role}
-          onChange={(e) => setRole(e.target.value as UserRole)}
-        >
-          {Object.values(UserRole).map((r) => (
-            <option key={r} value={r}>
-              {r}
-            </option>
-          ))}
-        </select>
+      <div className="relative grid w-full max-w-4xl gap-8 lg:grid-cols-2 lg:items-center">
+        <div className="hidden lg:block">
+          <p className="text-sm font-semibold uppercase tracking-widest text-emerald-400">EduTracker</p>
+          <h1 className="mt-4 text-4xl font-bold leading-tight text-white">
+            Modern billing & review management for educators
+          </h1>
+          <p className="mt-4 text-slate-400">
+            Track student reviews, subject rates, payments, and analytics in one beautiful dashboard.
+          </p>
+          <ul className="mt-8 space-y-3 text-sm text-slate-500">
+            <li>✓ Subject-based hourly billing</li>
+            <li>✓ Review & payment tracking</li>
+            <li>✓ Revenue charts & exports</li>
+          </ul>
+        </div>
 
-        <label className="mt-4 block text-sm text-slate-400">Email</label>
-        <input
-          type="email"
-          required
-          className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
+        <form onSubmit={onSubmit} className="glass-card w-full max-w-md justify-self-center lg:max-w-none">
+          <h2 className="text-2xl font-bold text-white">Sign in</h2>
+          <p className="mt-1 text-sm text-slate-500">Admin, Subscriber, or User account</p>
 
-        <label className="mt-4 block text-sm text-slate-400">Password</label>
-        <input
-          type="password"
-          required
-          className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
+          <div className="mt-6 space-y-4">
+            <FormField label="Role">
+              <SelectInput value={role} onChange={(e) => setRole(e.target.value as UserRole)}>
+                {Object.values(UserRole).map((r) => (
+                  <option key={r} value={r}>
+                    {r}
+                  </option>
+                ))}
+              </SelectInput>
+            </FormField>
+            <FormField label="Email">
+              <TextInput type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+            </FormField>
+            <FormField label="Password">
+              <TextInput
+                type="password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </FormField>
+          </div>
 
-        {error && <p className="mt-3 text-sm text-red-400">{error}</p>}
+          {error ? <p className="mt-4 text-sm text-red-400">{error}</p> : null}
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="mt-6 w-full rounded-lg bg-emerald-500 py-2.5 font-medium text-slate-950 hover:bg-emerald-400 disabled:opacity-50"
-        >
-          {loading ? 'Signing in...' : 'Sign in'}
-        </button>
+          <Button type="submit" disabled={loading} className="mt-6 w-full">
+            {loading ? 'Signing in…' : 'Sign in'}
+          </Button>
 
-        <p className="mt-4 text-center text-sm text-slate-500">
-          Subscriber?{' '}
-          <Link href="/auth/signup" className="text-emerald-400 hover:underline">
-            Register
-          </Link>
-        </p>
-      </form>
+          <p className="mt-4 text-center text-sm text-slate-500">
+            New subscriber?{' '}
+            <Link href="/auth/signup" className="font-medium text-emerald-400 hover:underline">
+              Create account
+            </Link>
+          </p>
+        </form>
+      </div>
     </div>
   );
 }
